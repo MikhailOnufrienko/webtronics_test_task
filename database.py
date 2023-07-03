@@ -1,3 +1,4 @@
+from redis.asyncio import client
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -21,4 +22,14 @@ async_session: AsyncSession = async_sessionmaker(async_engine, expire_on_commit=
 async def get_db_session() -> AsyncSession:
     async with async_session() as session:
         yield session 
-        
+
+
+redis: client.Redis = client.Redis(
+    host=settings.REDIS_HOST,
+    port=settings.REDIS_PORT,
+    db=settings.REDIS_DB
+)
+
+
+async def get_redis() -> client.Redis:
+    return redis
