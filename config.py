@@ -22,4 +22,4 @@ class Settings(BaseSettings):
         env_file_encoding = 'utf-8'
 
 
-app_settings = Settings()
+settings = Settings()
