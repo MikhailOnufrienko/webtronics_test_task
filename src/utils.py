@@ -11,7 +11,6 @@ from databases import get_redis
 
 class TokenService:
 
-
     @staticmethod
     async def generate_tokens(user_id: str) -> tuple[str]:
         subject_id = {'sub': user_id}
@@ -81,6 +80,7 @@ class TokenService:
     async def refresh_tokens(user_id: str, old_refresh_token: str) -> tuple[str, str]:
         if await TokenService.check_old_token_equal_stored_token(user_id, old_refresh_token):
             access_token, refresh_token = await TokenService.generate_tokens(user_id)
+            await TokenService.save_new_refresh_token_to_cache(user_id, refresh_token)
             return access_token, refresh_token
 
     @staticmethod
@@ -91,3 +91,8 @@ class TokenService:
             raise HTTPException(status_code=400, detail="Недействительный refresh-токен.")
         return True
     
+    @staticmethod
+    async def save_new_refresh_token_to_cache(user_id: str, token: str) -> None:
+        cache: client.Redis = await get_redis()
+        expires: int = settings.REFRESH_TOKEN_EXPIRES_IN * 60 * 60 * 24 # in seconds
+        await cache.setex(user_id, expires, token)
