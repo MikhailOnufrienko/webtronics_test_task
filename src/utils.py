@@ -1,10 +1,9 @@
 from datetime import datetime, timedelta
-from fastapi import HTTPException
 
+from fastapi import HTTPException
 from jose import jwt
 from redis.asyncio import client
 
-from src.schemas import UserLogin
 from config import settings
 from databases import get_redis
 
@@ -78,9 +77,12 @@ class TokenService:
 
     @staticmethod
     async def refresh_tokens(user_id: str, old_refresh_token: str) -> tuple[str, str]:
-        if await TokenService.check_old_token_equal_stored_token(user_id, old_refresh_token):
+        if await TokenService.check_old_token_equal_stored_token(
+            user_id, old_refresh_token
+        ):
             access_token, refresh_token = await TokenService.generate_tokens(user_id)
             await TokenService.save_new_refresh_token_to_cache(user_id, refresh_token)
+            await TokenService.add_invalid_access_token_to_cache(user_id, old_refresh_token)
             return access_token, refresh_token
 
     @staticmethod
@@ -96,3 +98,15 @@ class TokenService:
         cache: client.Redis = await get_redis()
         expires: int = settings.REFRESH_TOKEN_EXPIRES_IN * 60 * 60 * 24 # in seconds
         await cache.setex(user_id, expires, token)
+
+    @staticmethod
+    async def add_invalid_access_token_to_cache(
+        user_id: str, old_refresh_token: str
+    ) -> None:
+        invalid_token_key = f'invalid:{user_id}:{old_refresh_token}'
+        cache: client.Redis = await get_redis()
+        expires: int = settings.ACCESS_TOKEN_EXPIRES_IN * 60 * 60 * 24 # in seconds
+        cache.setex(invalid_token_key, expires, 'expired')
+        # The actual value of the invalid access token doesn't matter,
+        # that's why we just use 'expired'.
+    

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from databases import get_db_session
 from src.service import PostService, UserService
-from utils import TokenService
+from src.utils import TokenService
 
 
 user_router = APIRouter()
