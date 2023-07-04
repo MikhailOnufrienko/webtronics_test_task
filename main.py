@@ -5,7 +5,7 @@ from fastapi.exceptions import HTTPException, RequestValidationError
 
 from config import settings
 from databases import get_db_session, get_redis
-from src import router
+from src.router import router
 
 
 app = FastAPI(

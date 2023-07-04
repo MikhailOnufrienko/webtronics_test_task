@@ -25,7 +25,7 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     first_name = Column(String(50))
     last_name = Column(String(50))
-    email = Column(String(50))
+    email = Column(String(50), unique=True, nullable=False)
     
     def __init__(
             self, login: str, hashed_password: str, first_name: str | None,
@@ -50,7 +50,7 @@ class Post(Base):
     )
     title = Column(String(120), nullable=False)
     content = Column(Text())
-    author_id = Column(ForeignKey('user.id'))
+    author_id = Column(ForeignKey('user.id'), nullable=False)
     author = relationship('User')
     creation_dt = Column(DateTime, default=datetime.now)
 

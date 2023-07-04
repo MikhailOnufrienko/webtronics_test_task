@@ -12,7 +12,7 @@ class UserLogin(BaseModel):
 class UserRegistration(UserLogin):
     first_name: str | None
     last_name: str | None
-    email: EmailStr | None
+    email: EmailStr
 
 
 class Post(BaseModel):
