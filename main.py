@@ -5,7 +5,7 @@ from fastapi.exceptions import HTTPException, RequestValidationError
 
 from config import settings
 from databases import get_db_session, get_redis
-from src.router import router
+from src.router import user_router, post_router
 
 
 app = FastAPI(
@@ -49,7 +49,8 @@ async def shutdown() -> None:
     await postgres.close()
 
 
-app.include_router(router, prefix='/api/v1/auth/user', tags=['user'])
+app.include_router(user_router, prefix='/api/v1/auth/user', tags=['user'])
+app.include_router(post_router, prefix='/api/v1', tags=['post'])
 
 
 if __name__ == '__main__':

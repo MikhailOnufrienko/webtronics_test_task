@@ -6,13 +6,14 @@ from sqlalchemy import select
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from src.schemas import UserLogin, UserRegistration
+from src.models import Post
+from src.schemas import PostBase
 from src.models import User
 from databases import get_db_session
 from src.utils import TokenService
 
 
 class UserService:
-
 
     @staticmethod
     async def create_user(user: UserRegistration, db_session: AsyncSession) -> Response:
@@ -62,8 +63,8 @@ class UserService:
     @staticmethod
     async def login_user(user: UserLogin) -> Response:
         if await UserService.check_credentials_correct(user.login, user.password):
-            access_token, refresh_token = await TokenService.generate_tokens(user)
             user_id = await UserService.get_user_id(user)
+            access_token, refresh_token = await TokenService.generate_tokens(user_id)
             await TokenService.save_refresh_token_to_cache(user_id, refresh_token)
             content = json.dumps({
                 'user_id': user_id,
@@ -97,4 +98,20 @@ class UserService:
         async for session in get_db_session():
             result = await session.execute(query)
             return str(result.scalar_one())
-    
+
+
+class PostService:
+
+    @staticmethod
+    async def create_and_publish_post(
+        user: User, post: PostBase, db_session: AsyncSession
+    ) -> PostBase:
+        author_id = UserService.get_user_id(user.id)
+        new_post = Post(
+            title=post.title,
+            content=post.content,
+            author_id=author_id
+        )
+        db_session.add(new_post)
+        await db_session.commit()
+        return new_post

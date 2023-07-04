@@ -2,7 +2,8 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import MetaData
-from sqlalchemy import Column, DateTime, ForeignKey, String, Text
+from sqlalchemy import (Column, DateTime, ForeignKey,
+                        Integer, String, Text)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import relationship
@@ -53,11 +54,13 @@ class Post(Base):
     author_id = Column(ForeignKey('user.id'), nullable=False)
     author = relationship('User')
     creation_dt = Column(DateTime, default=datetime.now)
+    likes_count = Column (Integer, default=0)
+    dislikes_count = Column (Integer, default=0)
 
-    def __init__(self, title: str, content: str, author: User) -> None:
+    def __init__(self, title: str, content: str, author_id: User) -> None:
         self.title = title
         self.content = content
-        self.author = author
+        self.author_id = author_id
 
     def __repr__(self) -> str:
         return f'<Post {self.title}>'

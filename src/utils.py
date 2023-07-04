@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from fastapi import HTTPException
 
 from jose import jwt
 from redis.asyncio import client
@@ -12,13 +13,13 @@ class TokenService:
 
 
     @staticmethod
-    async def generate_tokens(user: UserLogin) -> tuple[str]:
-        username = {'sub': user.login}
+    async def generate_tokens(user_id: str) -> tuple[str]:
+        subject_id = {'sub': user_id}
         access_token = await TokenService.generate_access_token(
-            username, settings.ACCESS_TOKEN_EXPIRES_IN
+            subject_id, settings.ACCESS_TOKEN_EXPIRES_IN
         )
         refresh_token = await TokenService.generate_refresh_token(
-            username, settings.REFRESH_TOKEN_EXPIRES_IN
+            subject_id, settings.REFRESH_TOKEN_EXPIRES_IN
         )
         return access_token, refresh_token
     
@@ -75,3 +76,18 @@ class TokenService:
         cache: client.Redis, user_id: str
     ) -> None:
         cache.delete(user_id)
+
+    @staticmethod
+    async def refresh_tokens(user_id: str, old_refresh_token: str) -> tuple[str, str]:
+        if await TokenService.check_old_token_equal_stored_token(user_id, old_refresh_token):
+            access_token, refresh_token = await TokenService.generate_tokens(user_id)
+            return access_token, refresh_token
+
+    @staticmethod
+    async def check_old_token_equal_stored_token(user_id: str, old_token: str) -> bool:
+        cache: client.Redis = await get_redis()
+        stored_token: bytes = await cache.get(user_id)
+        if not stored_token or stored_token.decode() != old_token:
+            raise HTTPException(status_code=400, detail="Недействительный refresh-токен.")
+        return True
+    
