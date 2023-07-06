@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException
+from fastapi.exceptions import RequestValidationError
 from jose import jwt
 from redis.asyncio import client
 
@@ -76,37 +77,57 @@ class TokenService:
         cache.delete(user_id)
 
     @staticmethod
-    async def refresh_tokens(user_id: str, old_refresh_token: str) -> tuple[str, str]:
+    async def refresh_tokens(
+        user_id: str, old_access_token: str, old_refresh_token: str
+    ) -> tuple[str, str]:
+        cache: client.Redis = await get_redis()
         if await TokenService.check_old_token_equal_stored_token(
-            user_id, old_refresh_token
+            user_id, old_refresh_token, cache
         ):
-            access_token, refresh_token = await TokenService.generate_tokens(user_id)
-            await TokenService.save_new_refresh_token_to_cache(user_id, refresh_token)
-            await TokenService.add_invalid_access_token_to_cache(user_id, old_refresh_token)
-            return access_token, refresh_token
+            new_access_token, new_refresh_token = await TokenService.generate_tokens(
+                user_id
+            )
+            await TokenService.save_new_refresh_token_to_cache(
+                user_id, new_refresh_token, cache
+            )
+            await TokenService.add_invalid_access_token_to_cache(
+                user_id, old_access_token, cache
+            )
+            return new_access_token, new_refresh_token
 
     @staticmethod
-    async def check_old_token_equal_stored_token(user_id: str, old_token: str) -> bool:
-        cache: client.Redis = await get_redis()
+    async def check_old_token_equal_stored_token(
+        user_id: str, old_token: str, cache: client.Redis
+    ) -> bool:
         stored_token: bytes = await cache.get(user_id)
         if not stored_token or stored_token.decode() != old_token:
             raise HTTPException(status_code=400, detail="Недействительный refresh-токен.")
         return True
     
     @staticmethod
-    async def save_new_refresh_token_to_cache(user_id: str, token: str) -> None:
-        cache: client.Redis = await get_redis()
+    async def save_new_refresh_token_to_cache(
+        user_id: str, token: str, cache: client.Redis
+    ) -> None:
         expires: int = settings.REFRESH_TOKEN_EXPIRES_IN * 60 * 60 * 24 # in seconds
         await cache.setex(user_id, expires, token)
 
     @staticmethod
     async def add_invalid_access_token_to_cache(
-        user_id: str, old_refresh_token: str
+        user_id: str, access_token: str, cache: client.Redis
     ) -> None:
-        invalid_token_key = f'invalid:{user_id}:{old_refresh_token}'
-        cache: client.Redis = await get_redis()
+        invalid_token_key = f'invalid:{user_id}'
         expires: int = settings.ACCESS_TOKEN_EXPIRES_IN * 60 * 60 * 24 # in seconds
-        cache.setex(invalid_token_key, expires, 'expired')
-        # The actual value of the invalid access token doesn't matter,
-        # that's why we just use 'expired'.
+        await cache.setex(invalid_token_key, expires, access_token)
+    
+    @staticmethod
+    async def check_access_token_valid(access_token: str) -> bool:
+        cache: client.Redis = await get_redis()
+        cursor, keys = await cache.scan(b'0', match='*')
+        for key in keys:
+            value = await cache.get(key)
+            if value == access_token.encode():
+                raise HTTPException(
+                    status_code=400, detail='Невалидный access-token. Требуется аутентификация.'
+                )
+        return True
     

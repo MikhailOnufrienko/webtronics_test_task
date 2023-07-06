@@ -21,7 +21,7 @@ async def validation_exception_handler(
 ) -> ORJSONResponse:
     return ORJSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
-        content={"error": exc.errors()},
+        content={"pydantic error": exc.errors()},
     )
 
 

@@ -1,7 +1,7 @@
 from fastapi import Response
 from fastapi import APIRouter, Depends
-from src.schemas import TokenRequest, TokenResponse, UserDB, UserRegistration, UserLogin
-from src.schemas import PostDB
+from src.schemas import Token, UserDB, UserRegistration, UserLogin
+from src.schemas import PostBase, PostDB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from databases import get_db_session
@@ -32,16 +32,16 @@ async def login_user(
 
 @user_router.post(
         '/{user_id}/refresh-token',
-        response_model=TokenResponse,
+        response_model=Token,
         status_code=201
 )
-async def refresh_tokens(user_id: str, token_request: TokenRequest) -> TokenResponse:
-    access_token, refresh_roken = await TokenService.refresh_tokens(
-        user_id, token_request.refresh_token
+async def refresh_tokens(user_id: str, token_request: Token) -> Token:
+    new_access_token, new_refresh_roken = await TokenService.refresh_tokens(
+        user_id, token_request.access_token, token_request.refresh_token
     )
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_roken
+    return Token(
+        access_token=new_access_token,
+        refresh_token=new_refresh_roken
     )
 
 
@@ -52,16 +52,15 @@ async def posts():
 
 @post_router.post('/posts', response_model=PostDB, status_code=201)
 async def create_post(
-    user: UserDB, post: PostDB, db_session: AsyncSession = Depends(get_db_session)
-) -> PostDB:
-    response = await PostService.create_and_publish_post(user, post, db_session)
-    return response
+    post: PostBase, db_session: AsyncSession = Depends(get_db_session)
+    ) -> PostDB:
+    post_id = await PostService.create_and_publish_post(post, db_session)
+    return PostDB(id=post_id)
 
 
 @post_router.patch('/posts/<post_id>')
 async def update_post():
     pass
-
 
 @post_router.delete('/posts/<post_id>')
 async def delete_post():

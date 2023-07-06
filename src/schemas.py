@@ -22,21 +22,13 @@ class UserDB(UserRegistration):
 class PostBase(BaseModel):
     title: constr(max_length=120)
     content: str
+    access_token: str
 
 
 class PostDB(BaseModel):
     id: str
-    title: constr(max_length=120)
-    content: str
-    author_id: str
-    creation_dt: datetime
-    likes_count: int
-    dislikes_count: int
 
 
-class TokenRequest(BaseModel):
-    refresh_token: str
-
-
-class TokenResponse(TokenRequest):
+class Token(BaseModel):
     access_token: str
+    refresh_token: str  

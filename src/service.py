@@ -3,14 +3,16 @@ import json
 from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from jose import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from src.schemas import UserLogin, UserRegistration
 from src.models import Post
-from src.schemas import PostBase
+from src.schemas import PostBase, PostDB
 from src.models import User
 from databases import get_db_session
 from src.utils import TokenService
+from config import settings
 
 
 class UserService:
@@ -104,14 +106,23 @@ class PostService:
 
     @staticmethod
     async def create_and_publish_post(
-        user: User, post: PostBase, db_session: AsyncSession
-    ) -> PostBase:
-        author_id = UserService.get_user_id(user.id)
-        new_post = Post(
-            title=post.title,
-            content=post.content,
-            author_id=author_id
+        post: PostBase, db_session: AsyncSession
+    ) -> str:
+        if await TokenService.check_access_token_valid(post.access_token):
+            author_id = await PostService.get_author_id(post.access_token)
+            new_post = Post(
+                title=post.title,
+                content=post.content,
+                author_id=author_id
+            )
+            db_session.add(new_post)
+            await db_session.commit()
+            new_post_id_as_str = str(new_post.id)
+            return new_post_id_as_str
+
+    @staticmethod
+    async def get_author_id(access_token: str) -> str:
+        decoded_jwt: dict = jwt.decode(
+            access_token, settings.ACCESS_JWT_SECRET_KEY, settings.JWT_ALGORITHM
         )
-        db_session.add(new_post)
-        await db_session.commit()
-        return new_post
+        return decoded_jwt['sub']
