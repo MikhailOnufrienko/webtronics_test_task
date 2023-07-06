@@ -3,12 +3,13 @@ import json
 from fastapi import HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from jose import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from src.schemas import UserLogin, UserRegistration
 from src.models import Post
-from src.schemas import PostBase, PostDB, Posts
+from src.schemas import PostBase, PostDB, Posts, PostSingle
 from src.models import User
 from databases import get_db_session
 from src.utils import TokenService
@@ -137,6 +138,22 @@ class PostService:
                 status_code=400,
                 detail='Невалидный access-токен. Требуется аутентификация.'
             )
+
+    @staticmethod
+    async def get_post(post_id: str, db_session: AsyncSession) -> PostSingle:
+        query = select(Post).filter(Post.id == post_id)
+        query = query.options(joinedload(Post.author))
+        result = await db_session.execute(query)
+        post = result.scalar()
+        if not post:
+            raise HTTPException(status_code=404, detail='Запись не найдена.')
+        author_name = post.author.login
+        return PostSingle(
+            title=post.title,
+            content=post.content,
+            author=author_name,
+            creation_dt=post.creation_dt
+        )
 
     @staticmethod
     async def get_posts(db_session: AsyncSession) -> Posts:

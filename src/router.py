@@ -1,7 +1,7 @@
 from fastapi import Response
 from fastapi import APIRouter, Depends
 from src.schemas import Token, UserDB, UserRegistration, UserLogin
-from src.schemas import PostBase, PostDB, Posts
+from src.schemas import PostBase, PostDB, Posts, PostSingle
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from databases import get_db_session
@@ -46,8 +46,16 @@ async def refresh_tokens(user_id: str, token_request: Token) -> Token:
 
 
 @post_router.get('/posts', response_model=Posts, status_code=200)
-async def posts(db_session: AsyncSession = Depends(get_db_session)):
+async def posts(db_session: AsyncSession = Depends(get_db_session)) -> list[PostDB]:
     response = await PostService.get_posts(db_session)
+    return response
+
+
+@post_router.get('/posts/{post_id}', response_model=PostSingle, status_code=200)
+async def get_post(
+    post_id: str, db_session: AsyncSession = Depends(get_db_session)
+) -> PostSingle:
+    response = await PostService.get_post(post_id, db_session)
     return response
 
 

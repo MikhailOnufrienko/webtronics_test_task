@@ -36,6 +36,13 @@ class Posts(BaseModel):
     posts: list[PostDB]
 
 
+class PostSingle(BaseModel):
+    title: str
+    content: str
+    author: str
+    creation_dt: datetime
+
+
 class Token(BaseModel):
     access_token: str
     refresh_token: str  
