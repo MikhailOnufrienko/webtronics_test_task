@@ -8,7 +8,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 from src.schemas import UserLogin, UserRegistration
 from src.models import Post
-from src.schemas import PostBase, PostDB
+from src.schemas import PostBase, PostDB, Posts
 from src.models import User
 from databases import get_db_session
 from src.utils import TokenService
@@ -107,8 +107,8 @@ class PostService:
     @staticmethod
     async def create_and_publish_post(
         post: PostBase, db_session: AsyncSession
-    ) -> str:
-        if await TokenService.check_access_token_valid(post.access_token):
+    ) -> PostDB:
+        if await TokenService.check_access_token_not_expired(post.access_token):
             author_id = await PostService.get_author_id(post.access_token)
             new_post = Post(
                 title=post.title,
@@ -118,11 +118,34 @@ class PostService:
             db_session.add(new_post)
             await db_session.commit()
             new_post_id_as_str = str(new_post.id)
-            return new_post_id_as_str
+            return PostDB(
+                id=new_post_id_as_str,
+                title=new_post.title,
+                author_id=new_post.author_id,
+                creation_dt=new_post.creation_dt
+            )
 
     @staticmethod
     async def get_author_id(access_token: str) -> str:
-        decoded_jwt: dict = jwt.decode(
-            access_token, settings.ACCESS_JWT_SECRET_KEY, settings.JWT_ALGORITHM
-        )
-        return decoded_jwt['sub']
+        try:
+            decoded_jwt: dict = jwt.decode(
+                access_token, settings.ACCESS_JWT_SECRET_KEY, settings.JWT_ALGORITHM
+            )
+            return decoded_jwt['sub']
+        except:
+            raise HTTPException(
+                status_code=400,
+                detail='Невалидный access-токен. Требуется аутентификация.'
+            )
+
+    @staticmethod
+    async def get_posts(db_session: AsyncSession) -> Posts:
+        query = select(Post)
+        result = await db_session.execute(query)
+        posts = result.scalars().all()
+        return Posts(posts=[
+            {'id': str(post.id),
+            'title': post.title,
+            'author_id': str(post.author_id),
+            'creation_dt': post.creation_dt} for post in posts
+        ] if posts else [])

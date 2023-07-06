@@ -27,6 +27,13 @@ class PostBase(BaseModel):
 
 class PostDB(BaseModel):
     id: str
+    title: str
+    author_id: str
+    creation_dt: datetime
+
+
+class Posts(BaseModel):
+    posts: list[PostDB]
 
 
 class Token(BaseModel):

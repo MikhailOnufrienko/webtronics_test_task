@@ -120,14 +120,15 @@ class TokenService:
         await cache.setex(invalid_token_key, expires, access_token)
     
     @staticmethod
-    async def check_access_token_valid(access_token: str) -> bool:
+    async def check_access_token_not_expired(access_token: str) -> bool:
         cache: client.Redis = await get_redis()
         cursor, keys = await cache.scan(b'0', match='*')
         for key in keys:
             value = await cache.get(key)
             if value == access_token.encode():
                 raise HTTPException(
-                    status_code=400, detail='Невалидный access-token. Требуется аутентификация.'
+                    status_code=400,
+                    detail='Просроченный access-token. Требуется аутентификация.'
                 )
         return True
     
