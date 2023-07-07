@@ -3,13 +3,14 @@ import uuid
 from typing import Annotated
 
 from fastapi import HTTPException, Header, Response
+from redis import client
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from sqlalchemy.orm import joinedload
 from jose import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from src.schemas import PostUpdate, UserLogin, UserRegistration
+from src.schemas import PostUpdate, UserLogin, UserLogout, UserRegistration
 from src.models import Post
 from src.schemas import PostBase, PostDB, Posts, PostSingle
 from src.models import User
@@ -68,7 +69,7 @@ class UserService:
     @staticmethod
     async def login_user(user: UserLogin) -> Response:
         if await UserService.check_credentials_correct(user.login, user.password):
-            user_id = await UserService.get_user_id(user)
+            user_id = await UserService.get_user_id_by_login(user)
             access_token, refresh_token = await TokenService.generate_tokens(user_id)
             await TokenService.save_refresh_token_to_cache(user_id, refresh_token)
             content = json.dumps({
@@ -98,11 +99,18 @@ class UserService:
             raise HTTPException(status_code=401, detail='Логин или пароль не верен.')
         
     @staticmethod
-    async def get_user_id(user: UserLogin) -> str:
+    async def get_user_id_by_login(user: UserLogin) -> str:
         query = select(User.id).filter(User.login == user.login)
         async for session in get_db_session():
             result = await session.execute(query)
             return str(result.scalar_one())
+        
+    @staticmethod
+    async def logout_user(user: UserLogout, cache: client.Redis) -> str:
+        await TokenService.add_invalid_access_token_to_cache(user.access_token, cache)
+        user_id = await TokenService.get_user_id_by_token(user.access_token)
+        await TokenService.delete_refresh_token_from_cache(cache, user_id)
+        return 'Вы успешно вышли из учётной записи.'
 
 
 class PostService:
@@ -174,7 +182,7 @@ class PostService:
         post_id: str, post_update: PostUpdate, authorization: Annotated[str, Header()], db_session: AsyncSession
     ) -> str:
         access_token = await TokenService.get_token_authorization(authorization)
-        if await TokenService.check_access_token_not_expired(access_token):
+        if await TokenService.check_access_token_valid(access_token):
             query = select(Post).filter(Post.id == post_id)
             result = await db_session.execute(query)
             post = result.one_or_none()

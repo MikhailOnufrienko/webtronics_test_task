@@ -2,7 +2,8 @@ from typing import Annotated
 
 from fastapi import Header, Response
 from fastapi import APIRouter, Depends
-from src.schemas import PostUpdate, Token, UserDB, UserRegistration, UserLogin
+from redis import client
+from src.schemas import PostUpdate, Token, UserDB, UserLogout, UserRegistration, UserLogin
 from src.schemas import PostBase, PostDB, Posts, PostSingle
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,10 +26,14 @@ async def register_user(
 
 
 @user_router.post('/login', status_code=200)
-async def login_user(
-    user: UserLogin
-) -> Response:
+async def login_user(user: UserLogin) -> Response:
     response = await UserService.login_user(user)
+    return response
+
+
+@user_router.post('/logout', status_code=200)
+async def logout_user(user_logout: UserLogout, cache: client.Redis) -> str:
+    response = await UserService.logout_user(user_logout, cache)
     return response
 
 

@@ -51,3 +51,8 @@ class PostUpdate(BaseModel):
 class Token(BaseModel):
     access_token: str
     refresh_token: str  
+
+
+class UserLogout(BaseModel):
+    access_token: str
+    refresh_token: str

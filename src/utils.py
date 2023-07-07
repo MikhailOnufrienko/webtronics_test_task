@@ -114,11 +114,34 @@ class TokenService:
 
     @staticmethod
     async def add_invalid_access_token_to_cache(
-        user_id: str, access_token: str, cache: client.Redis
+        access_token: str, cache: client.Redis
     ) -> None:
-        invalid_token_key = f'invalid:{user_id}'
+        current_datetime = datetime.now()
+        invalid_token_key = f'invalid:{current_datetime}'
         expires: int = settings.ACCESS_TOKEN_EXPIRES_IN * 60 * 60 * 24 # in seconds
         await cache.setex(invalid_token_key, expires, access_token)
+
+    @staticmethod
+    async def check_access_token_valid(access_token: str) -> bool:
+        if await TokenService.check_access_token_signature_valid(access_token) and \
+            await TokenService.check_access_token_not_expired(access_token):
+            return True
+
+    @staticmethod
+    async def check_access_token_signature_valid(access_token: str) -> bool:
+        header, payload, signature = access_token.split('.')
+        subject = await TokenService.get_user_id_by_token(access_token)
+        if signature == jwt.decode(
+            access_token,
+            settings.ACCESS_JWT_SECRET_KEY,
+            settings.JWT_ALGORITHM,
+            subject=subject):
+            return True
+
+    @staticmethod
+    async def get_user_id_by_token(access_token: str) -> str:
+        claims = jwt.get_unverified_claims(access_token)
+        return claims['sub']
     
     @staticmethod
     async def check_access_token_not_expired(access_token: str) -> bool:
