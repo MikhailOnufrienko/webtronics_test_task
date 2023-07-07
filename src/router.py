@@ -1,6 +1,8 @@
-from fastapi import Response
+from typing import Annotated
+
+from fastapi import Header, Response
 from fastapi import APIRouter, Depends
-from src.schemas import Token, UserDB, UserRegistration, UserLogin
+from src.schemas import PostUpdate, Token, UserDB, UserRegistration, UserLogin
 from src.schemas import PostBase, PostDB, Posts, PostSingle
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -67,9 +69,16 @@ async def create_post(
     return response
 
 
-@post_router.patch('/posts/<post_id>')
-async def update_post():
-    pass
+@post_router.patch('/posts/{post_id}', status_code=201)
+async def update_post(
+    post_id: str,
+    post: PostUpdate,
+    authorization: Annotated[str, Header()],
+    db_session: AsyncSession = Depends(get_db_session)
+) -> str:
+    response = await PostService.update_post(post_id, post, authorization, db_session)
+    return response
+
 
 @post_router.delete('/posts/<post_id>')
 async def delete_post():

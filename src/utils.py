@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
+from typing import Annotated
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Header
 from fastapi.exceptions import RequestValidationError
 from jose import jwt
 from redis.asyncio import client
@@ -132,3 +133,10 @@ class TokenService:
                 )
         return True
     
+    @staticmethod
+    async def get_token_authorization(authorization: Annotated[str, Header()]) -> str:
+        scheme, token = authorization.split()
+        print("scheme: ", scheme)
+        if scheme.lower() != 'bearer':
+            raise HTTPException(status_code=401, detail="Недействительная схема авторизации.")
+        return token

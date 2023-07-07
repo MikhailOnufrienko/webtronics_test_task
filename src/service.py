@@ -1,13 +1,15 @@
 import json
+import uuid
+from typing import Annotated
 
-from fastapi import HTTPException, Response
+from fastapi import HTTPException, Header, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import joinedload
 from jose import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from src.schemas import UserLogin, UserRegistration
+from src.schemas import PostUpdate, UserLogin, UserRegistration
 from src.models import Post
 from src.schemas import PostBase, PostDB, Posts, PostSingle
 from src.models import User
@@ -166,3 +168,27 @@ class PostService:
             'author_id': str(post.author_id),
             'creation_dt': post.creation_dt} for post in posts
         ] if posts else [])
+    
+    @staticmethod
+    async def update_post(
+        post_id: str, post_update: PostUpdate, authorization: Annotated[str, Header()], db_session: AsyncSession
+    ) -> str:
+        access_token = await TokenService.get_token_authorization(authorization)
+        if await TokenService.check_access_token_not_expired(access_token):
+            query = select(Post).filter(Post.id == post_id)
+            result = await db_session.execute(query)
+            post = result.one_or_none()
+            if not post:
+                raise HTTPException(status_code=404, detail="Запись не найдена.")
+            post_table = Post.__table__
+            upd_query = (update(post_table).
+                where(post_table.c.id == uuid.UUID(post_id)).
+                values({
+                    post_table.c.title: post_update.title,
+                    post_table.c.content: post_update.content
+                })
+            )
+            await db_session.execute(upd_query)
+            await db_session.commit()
+            return 'Запись успешно обновлена.'
+            

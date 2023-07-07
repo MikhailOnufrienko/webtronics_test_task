@@ -43,6 +43,11 @@ class PostSingle(BaseModel):
     creation_dt: datetime
 
 
+class PostUpdate(BaseModel):
+    title: str
+    content: str
+
+
 class Token(BaseModel):
     access_token: str
     refresh_token: str  
