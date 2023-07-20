@@ -53,8 +53,13 @@ class Token(BaseModel):
     refresh_token: str  
 
 
-class PostUpdateDeleteResponse(BaseModel):
+class PostUpdateResponse(BaseModel):
     title: str
+    new_tokens: Token | None
+
+
+class PostDeleteResponse(BaseModel):
+    post_id: str
     new_tokens: Token | None
 
 

@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import Header, Response
 from fastapi import APIRouter, Depends
 from redis import client
-from src.schemas import PostUpdate, PostUpdateDeleteResponse, RefreshToken, Token, UserDB, UserLogout, UserRegistration, UserLogin
+from src.schemas import PostDeleteResponse, PostUpdate, PostUpdateResponse, Token, UserLogout, UserRegistration, UserLogin
 from src.schemas import PostBase, PostDB, Posts, PostSingle
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -74,25 +74,38 @@ async def create_post(
     return response
 
 
-@post_router.patch('/post/{post_id}', response_model=PostUpdateDeleteResponse, status_code=200)
+@post_router.patch('/post/{post_id}', response_model=PostUpdateResponse, status_code=200)
 async def update_post(
     post_id: str,
     post: PostUpdate,
     authorization: Annotated[str, Header()],
     db_session: AsyncSession = Depends(get_db_session)
-) -> str:
+) -> PostUpdateResponse:
     response = await PostService.update_post(post_id, post, authorization, db_session)
-    return PostUpdateDeleteResponse(
+    return PostUpdateResponse(
         title=response['title'],
         new_tokens={
             'access_token': response['access_token'],
             'refresh_token': response['refresh_token']
         }
-    ) if len(response) > 1 else PostUpdateDeleteResponse(
+    ) if len(response) > 1 else PostUpdateResponse(
         title=response['title']
     )
 
 
-@post_router.delete('/post/{post_id}', response_model=PostUpdateDeleteResponse, status_code=200)
-async def delete_post():
-    pass
+@post_router.delete('/post/{post_id}', response_model=PostDeleteResponse, status_code=200)
+async def delete_post(
+    post_id: str,
+    authorization: Annotated[str, Header()],
+    db_session: AsyncSession = Depends(get_db_session)
+) -> PostDeleteResponse:
+    response = await PostService.delete_post(post_id, authorization, db_session)
+    return PostDeleteResponse(
+        post_id=response['post_id'],
+        new_tokens={
+            'access_token': response['access_token'],
+            'refresh_token': response['refresh_token']
+        }
+    ) if len(response) > 1 else PostDeleteResponse(
+        post_id=response['post_id']
+    )

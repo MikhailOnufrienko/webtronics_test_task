@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import HTTPException, Header, Response
 from redis import client
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete
 from sqlalchemy.orm import joinedload
 from jose import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -183,7 +183,7 @@ class PostService:
         post_update: PostUpdate,
         authorization: Annotated[str, Header()],
         db_session: AsyncSession
-    ) -> str:
+    ) -> dict[str, str]:
         access_token = await TokenService.get_token_authorization(authorization)
         validation_result = await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
         if validation_result:    
@@ -206,6 +206,33 @@ class PostService:
                 'title': post_update.title
             } if isinstance(validation_result, bool) else {
                 'title': post_update.title,
+                'access_token': validation_result[0],
+                'refresh_token': validation_result[1]
+            }
+
+    @staticmethod
+    async def delete_post(
+        post_id: str,
+        authorization: Annotated[str, Header()],
+        db_session: AsyncSession
+    ) -> dict[str, str]:
+        access_token = await TokenService.get_token_authorization(authorization)
+        validation_result = await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
+        if validation_result:    
+            query = select(Post).filter(Post.id == post_id)
+            result = await db_session.execute(query)
+            post = result.one_or_none()
+            if not post:
+                raise HTTPException(status_code=404, detail="Запись не найдена.")
+            post_table = Post.__table__
+            delete_query = (delete(post_table).
+                            where(post_table.c.id == uuid.UUID(post_id)))
+            await db_session.execute(delete_query)
+            await db_session.commit()
+            return {
+                'post_id': post_id
+            } if isinstance(validation_result, bool) else {
+                'post_id': post_id,
                 'access_token': validation_result[0],
                 'refresh_token': validation_result[1]
             }
