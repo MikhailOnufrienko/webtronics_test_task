@@ -3,11 +3,11 @@ from typing import Annotated
 from fastapi import Header, Response
 from fastapi import APIRouter, Depends
 from redis import client
-from src.schemas import PostUpdate, Token, UserDB, UserLogout, UserRegistration, UserLogin
+from src.schemas import PostUpdate, PostUpdateDeleteResponse, RefreshToken, Token, UserDB, UserLogout, UserRegistration, UserLogin
 from src.schemas import PostBase, PostDB, Posts, PostSingle
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from databases import get_db_session
+from databases import get_db_session, get_redis
 from src.service import PostService, UserService
 from src.utils import TokenService
 
@@ -32,7 +32,7 @@ async def login_user(user: UserLogin) -> Response:
 
 
 @user_router.post('/logout', status_code=200)
-async def logout_user(user_logout: UserLogout, cache: client.Redis) -> str:
+async def logout_user(user_logout: UserLogout, cache: client.Redis = Depends(get_redis)) -> str:
     response = await UserService.logout_user(user_logout, cache)
     return response
 
@@ -52,13 +52,13 @@ async def refresh_tokens(user_id: str, token_request: Token) -> Token:
     )
 
 
-@post_router.get('/posts', response_model=Posts, status_code=200)
+@post_router.get('/post', response_model=Posts, status_code=200)
 async def posts(db_session: AsyncSession = Depends(get_db_session)) -> list[PostDB]:
     response = await PostService.get_posts(db_session)
     return response
 
 
-@post_router.get('/posts/{post_id}', response_model=PostSingle, status_code=200)
+@post_router.get('/post/{post_id}', response_model=PostSingle, status_code=200)
 async def get_post(
     post_id: str, db_session: AsyncSession = Depends(get_db_session)
 ) -> PostSingle:
@@ -66,7 +66,7 @@ async def get_post(
     return response
 
 
-@post_router.post('/posts', response_model=PostDB, status_code=201)
+@post_router.post('/post', response_model=PostDB, status_code=201)
 async def create_post(
     post: PostBase, db_session: AsyncSession = Depends(get_db_session)
     ) -> PostDB:
@@ -74,7 +74,7 @@ async def create_post(
     return response
 
 
-@post_router.patch('/posts/{post_id}', status_code=201)
+@post_router.patch('/post/{post_id}', response_model=PostUpdateDeleteResponse, status_code=200)
 async def update_post(
     post_id: str,
     post: PostUpdate,
@@ -82,9 +82,17 @@ async def update_post(
     db_session: AsyncSession = Depends(get_db_session)
 ) -> str:
     response = await PostService.update_post(post_id, post, authorization, db_session)
-    return response
+    return PostUpdateDeleteResponse(
+        title=response['title'],
+        new_tokens={
+            'access_token': response['access_token'],
+            'refresh_token': response['refresh_token']
+        }
+    ) if len(response) > 1 else PostUpdateDeleteResponse(
+        title=response['title']
+    )
 
 
-@post_router.delete('/posts/<post_id>')
+@post_router.delete('/post/{post_id}', response_model=PostUpdateDeleteResponse, status_code=200)
 async def delete_post():
     pass

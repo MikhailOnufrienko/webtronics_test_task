@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     REFRESH_JWT_SECRET_KEY: str
     REFRESH_TOKEN_EXPIRES_IN: int
     ACCESS_TOKEN_EXPIRES_IN: int
-    JWT_ALGORITHM: str
+    JWT_ALGORITHM: str = 'HS256'
     
     class Config:
         env_file = '.env'

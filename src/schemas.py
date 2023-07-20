@@ -53,6 +53,20 @@ class Token(BaseModel):
     refresh_token: str  
 
 
+class PostUpdateDeleteResponse(BaseModel):
+    title: str
+    new_tokens: Token | None
+
+
 class UserLogout(BaseModel):
     access_token: str
+    refresh_token: str
+
+
+class ResponseAndTokens(BaseModel):
+    response: str
+    access_token: str
+    refresh_token: str
+
+class RefreshToken(BaseModel):
     refresh_token: str

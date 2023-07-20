@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import HTTPException, Header
 from fastapi.exceptions import RequestValidationError
 from jose import jwt
+from jose.exceptions import JWTError
 from redis.asyncio import client
 
 from config import settings
@@ -59,7 +60,7 @@ class TokenService:
         cache: client.Redis = await get_redis()
         if await TokenService.check_refresh_token_exists_in_cache(cache, user_id):
             await TokenService.delete_refresh_token_from_cache(cache, user_id)
-        expires: int = settings.REFRESH_TOKEN_EXPIRES_IN * 60 * 60 * 24 # in seconds
+        expires: int = settings.REFRESH_TOKEN_EXPIRES_IN # in seconds
         await cache.setex(user_id, expires, token)
 
     @staticmethod
@@ -75,7 +76,7 @@ class TokenService:
     async def delete_refresh_token_from_cache(
         cache: client.Redis, user_id: str
     ) -> None:
-        cache.delete(user_id)
+        await cache.delete(user_id)
 
     @staticmethod
     async def refresh_tokens(
@@ -92,7 +93,7 @@ class TokenService:
                 user_id, new_refresh_token, cache
             )
             await TokenService.add_invalid_access_token_to_cache(
-                user_id, old_access_token, cache
+                old_access_token, cache
             )
             return new_access_token, new_refresh_token
 
@@ -109,7 +110,7 @@ class TokenService:
     async def save_new_refresh_token_to_cache(
         user_id: str, token: str, cache: client.Redis
     ) -> None:
-        expires: int = settings.REFRESH_TOKEN_EXPIRES_IN * 60 * 60 * 24 # in seconds
+        expires: int = settings.REFRESH_TOKEN_EXPIRES_IN # in seconds
         await cache.setex(user_id, expires, token)
 
     @staticmethod
@@ -118,25 +119,41 @@ class TokenService:
     ) -> None:
         current_datetime = datetime.now()
         invalid_token_key = f'invalid:{current_datetime}'
-        expires: int = settings.ACCESS_TOKEN_EXPIRES_IN * 60 * 60 * 24 # in seconds
+        expires: int = settings.ACCESS_TOKEN_EXPIRES_IN # in seconds
         await cache.setex(invalid_token_key, expires, access_token)
 
     @staticmethod
-    async def check_access_token_valid(access_token: str) -> bool:
-        if await TokenService.check_access_token_signature_valid(access_token) and \
-            await TokenService.check_access_token_not_expired(access_token):
-            return True
+    async def check_access_token_valid_or_return_new_tokens(access_token: str) -> bool | tuple[str]:
+        cache = await client.Redis()
+        if await TokenService.check_access_token_not_used_for_logout(access_token, cache):
+            if await TokenService.check_access_token_signature_valid(access_token):
+                return True
+            else:
+                user_id = await TokenService.get_user_id_by_token(access_token)
+                refresh_token = await TokenService.get_refresh_token_from_cache(user_id, cache)
+                new_access_token, new_refresh_token = await TokenService.refresh_tokens(user_id, access_token, refresh_token)
+                await TokenService.save_new_refresh_token_to_cache(user_id, new_refresh_token, cache)
+                return new_access_token, new_refresh_token
+    
+    @staticmethod
+    async def get_refresh_token_from_cache(user_id: str, cache: client.Redis) -> str:
+        token: bytes = await cache.get(user_id)
+        if token:
+            return token.decode()
+        raise HTTPException(status_code=400, detail='Требуется пройти аутентификацию.')
 
     @staticmethod
     async def check_access_token_signature_valid(access_token: str) -> bool:
-        header, payload, signature = access_token.split('.')
-        subject = await TokenService.get_user_id_by_token(access_token)
-        if signature == jwt.decode(
-            access_token,
-            settings.ACCESS_JWT_SECRET_KEY,
-            settings.JWT_ALGORITHM,
-            subject=subject):
-            return True
+        try:
+            decoded_token = jwt.decode(
+                access_token,
+                settings.ACCESS_JWT_SECRET_KEY,
+                settings.JWT_ALGORITHM)
+            if decoded_token:
+                return True
+        except JWTError:
+            return False
+        
 
     @staticmethod
     async def get_user_id_by_token(access_token: str) -> str:
@@ -144,21 +161,20 @@ class TokenService:
         return claims['sub']
     
     @staticmethod
-    async def check_access_token_not_expired(access_token: str) -> bool:
-        cache: client.Redis = await get_redis()
+    async def check_access_token_not_used_for_logout(access_token: str, cache: client.Redis) -> bool:
         cursor, keys = await cache.scan(b'0', match='*')
         for key in keys:
             value = await cache.get(key)
             if value == access_token.encode():
                 raise HTTPException(
                     status_code=400,
-                    detail='Просроченный access-token. Требуется аутентификация.'
+                    detail='Недействительный access-token. Требуется аутентификация.'
                 )
         return True
     
     @staticmethod
     async def get_token_authorization(authorization: Annotated[str, Header()]) -> str:
-        scheme, token = authorization.split()
+        scheme, token = authorization.split(' ')
         print("scheme: ", scheme)
         if scheme.lower() != 'bearer':
             raise HTTPException(status_code=401, detail="Недействительная схема авторизации.")

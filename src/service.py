@@ -10,7 +10,7 @@ from sqlalchemy.orm import joinedload
 from jose import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from src.schemas import PostUpdate, UserLogin, UserLogout, UserRegistration
+from src.schemas import PostUpdate, ResponseAndTokens, UserLogin, UserLogout, UserRegistration
 from src.models import Post
 from src.schemas import PostBase, PostDB, Posts, PostSingle
 from src.models import User
@@ -83,19 +83,18 @@ class UserService:
     
     @staticmethod
     async def check_credentials_correct(login: str, password: str) -> bool:
-        try:
-            query_for_login = select(User.login).filter(User.login == login)
-            async for session in get_db_session():
-                result = await session.execute(query_for_login)
-                if result.scalar_one_or_none():
-                    query_for_password = select(
-                        User.hashed_password
-                    ).filter(User.login == login)
-                    result = await session.execute(query_for_password)
-                    hashed_password = result.scalar_one()
-                    if check_password_hash(hashed_password, password):
-                        return True
-        except HTTPException:
+        query_for_login = select(User.login).filter(User.login == login)
+        async for session in get_db_session():
+            result = await session.execute(query_for_login)
+            if result.scalar_one_or_none():
+                print(result)
+                query_for_password = select(
+                    User.hashed_password
+                ).filter(User.login == login)
+                result = await session.execute(query_for_password)
+                hashed_password = result.scalar_one()
+                if check_password_hash(hashed_password, password):
+                    return True
             raise HTTPException(status_code=401, detail='Логин или пароль не верен.')
         
     @staticmethod
@@ -103,7 +102,8 @@ class UserService:
         query = select(User.id).filter(User.login == user.login)
         async for session in get_db_session():
             result = await session.execute(query)
-            return str(result.scalar_one())
+            user_id = result.scalar_one()
+            return str(user_id)
         
     @staticmethod
     async def logout_user(user: UserLogout, cache: client.Redis) -> str:
@@ -179,10 +179,14 @@ class PostService:
     
     @staticmethod
     async def update_post(
-        post_id: str, post_update: PostUpdate, authorization: Annotated[str, Header()], db_session: AsyncSession
+        post_id: str,
+        post_update: PostUpdate,
+        authorization: Annotated[str, Header()],
+        db_session: AsyncSession
     ) -> str:
         access_token = await TokenService.get_token_authorization(authorization)
-        if await TokenService.check_access_token_valid(access_token):
+        validation_result = await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
+        if validation_result:    
             query = select(Post).filter(Post.id == post_id)
             result = await db_session.execute(query)
             post = result.one_or_none()
@@ -198,5 +202,10 @@ class PostService:
             )
             await db_session.execute(upd_query)
             await db_session.commit()
-            return 'Запись успешно обновлена.'
-            
+            return {
+                'title': post_update.title
+            } if isinstance(validation_result, bool) else {
+                'title': post_update.title,
+                'access_token': validation_result[0],
+                'refresh_token': validation_result[1]
+            }
