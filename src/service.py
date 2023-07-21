@@ -2,33 +2,30 @@ import json
 import uuid
 from typing import Annotated
 
-from fastapi import HTTPException, Header, Response
+from fastapi import HTTPException, Header
 from fastapi.responses import JSONResponse
 from redis import client
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 from sqlalchemy.orm import joinedload
-from jose import jwt
-from jose.exceptions import ExpiredSignatureError, JWTError
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from src.schemas import PostUpdate, ResponseAndTokens, UserLogin, UserLogout, UserRegistration
+from src.schemas import PostUpdate, UserLogin, UserLogout, UserRegistration
 from src.models import Post
-from src.schemas import PostBase, PostDB, Posts, PostSingle
+from src.schemas import PostBase, Posts, PostSingle
 from src.models import User
 from databases import get_db_session
 from src.utils import TokenService
-from config import settings
 
 
 class UserService:
 
     @staticmethod
-    async def create_user(user: UserRegistration, db_session: AsyncSession) -> Response:
+    async def create_user(user: UserRegistration, db_session: AsyncSession) -> JSONResponse:
         if (not await UserService.check_login_exists(user.login)
             and not await UserService.check_email_exists(user.email)):
             success_text = await UserService.save_user_to_database(user, db_session)
-            return Response(content=success_text, status_code=201)
+            return JSONResponse(content=success_text, status_code=201)
 
     @staticmethod
     async def check_login_exists(login: str) -> bool:
@@ -69,7 +66,7 @@ class UserService:
         return "Вы успешно зарегистрировались."
     
     @staticmethod
-    async def login_user(user: UserLogin) -> Response:
+    async def login_user(user: UserLogin) -> JSONResponse:
         if await UserService.check_credentials_correct(user.login, user.password):
             user_id = await UserService.get_user_id_by_login(user)
             access_token, refresh_token = await TokenService.generate_tokens(user_id)
@@ -79,7 +76,7 @@ class UserService:
                 'access_token': access_token,
                 'refresh_token': refresh_token
             })
-            response = Response(status_code=200, content=content)
+            response = JSONResponse(status_code=200, content=content)
             response.headers['Content-Type'] = 'application/json'
             return response
     

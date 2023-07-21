@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import HTTPException, Header
-from fastapi.exceptions import RequestValidationError
 from jose import ExpiredSignatureError, jwt
 from jose.exceptions import JWTError
 from redis.asyncio import client
