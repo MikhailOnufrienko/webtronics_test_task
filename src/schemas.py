@@ -54,12 +54,10 @@ class Token(BaseModel):
 
 class PostUpdateResponse(BaseModel):
     title: str
-    new_tokens: Token | None
 
 
 class PostDeleteResponse(BaseModel):
     post_id: str
-    new_tokens: Token | None
 
 
 class UserLogout(BaseModel):

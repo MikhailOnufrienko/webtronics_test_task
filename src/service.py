@@ -120,7 +120,7 @@ class PostService:
     @staticmethod
     async def create_and_publish_post(
         post: PostBase, authorization: Annotated[str, Header()], db_session: AsyncSession
-    ) -> PostDB:
+    ) -> JSONResponse:
         access_token = await TokenService.get_token_authorization(authorization)
         validation_result = await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
         if validation_result:
@@ -141,7 +141,7 @@ class PostService:
             headers = {
                 'X-Access-Token': validation_result[0],
                 'X-Refresh-Token': validation_result[1]
-            }
+            } if isinstance(validation_result, tuple) else {}
             return JSONResponse(content=content, headers=headers)
 
     @staticmethod
@@ -178,15 +178,16 @@ class PostService:
         post_update: PostUpdate,
         authorization: Annotated[str, Header()],
         db_session: AsyncSession
-    ) -> dict[str, str]:
+    ) -> JSONResponse:
         access_token = await TokenService.get_token_authorization(authorization)
         validation_result = await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
-        if validation_result:    
-            query = select(Post).filter(Post.id == post_id)
+        if validation_result:
+            user_id = await TokenService.get_user_id_by_token(access_token)
+            query = select(Post).filter(Post.id == post_id, Post.author_id == user_id)
             result = await db_session.execute(query)
             post = result.one_or_none()
             if not post:
-                raise HTTPException(status_code=404, detail="Запись не найдена.")
+                raise HTTPException(status_code=404, detail="Запись не найдена либо изменить запись может только автор.")
             post_table = Post.__table__
             upd_query = (update(post_table).
                 where(post_table.c.id == uuid.UUID(post_id)).
@@ -197,37 +198,36 @@ class PostService:
             )
             await db_session.execute(upd_query)
             await db_session.commit()
-            return {
-                'title': post_update.title
-            } if isinstance(validation_result, bool) else {
-                'title': post_update.title,
-                'access_token': validation_result[0],
-                'refresh_token': validation_result[1]
-            }
+            content = {'title': post_update.title}
+            headers = {
+                'X-Access-Token': validation_result[0],
+                'X-Refresh-Token': validation_result[1]
+            } if isinstance(validation_result, tuple) else {}
+            return JSONResponse(content=content, headers=headers)
 
     @staticmethod
     async def delete_post(
         post_id: str,
         authorization: Annotated[str, Header()],
         db_session: AsyncSession
-    ) -> dict[str, str]:
+    ) -> JSONResponse:
         access_token = await TokenService.get_token_authorization(authorization)
         validation_result = await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
-        if validation_result:    
-            query = select(Post).filter(Post.id == post_id)
+        if validation_result:
+            user_id = await TokenService.get_user_id_by_token(access_token)
+            query = select(Post).filter(Post.id == post_id, Post.author_id == user_id)
             result = await db_session.execute(query)
             post = result.one_or_none()
             if not post:
-                raise HTTPException(status_code=404, detail="Запись не найдена.")
+                raise HTTPException(status_code=404, detail="Запись не найдена либо удалить запись может только автор.")
             post_table = Post.__table__
             delete_query = (delete(post_table).
                             where(post_table.c.id == uuid.UUID(post_id)))
             await db_session.execute(delete_query)
             await db_session.commit()
-            return {
-                'post_id': post_id
-            } if isinstance(validation_result, bool) else {
-                'post_id': post_id,
-                'access_token': validation_result[0],
-                'refresh_token': validation_result[1]
-            }
+            content = {'post_id': post_id}
+            headers = {
+                'X-Access-Token': validation_result[0],
+                'X-Refresh-Token': validation_result[1]
+            } if isinstance(validation_result, tuple) else {}
+            return JSONResponse(content=content, headers=headers)

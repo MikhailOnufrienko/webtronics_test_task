@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     ACCESS_JWT_SECRET_KEY: str
     REFRESH_JWT_SECRET_KEY: str
     REFRESH_TOKEN_EXPIRES_IN: int
-    ACCESS_TOKEN_EXPIRES_IN: float = 0.00011574074
+    ACCESS_TOKEN_EXPIRES_IN: int
     JWT_ALGORITHM: str = 'HS256'
     
     class Config:

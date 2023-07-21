@@ -84,15 +84,7 @@ async def update_post(
     db_session: AsyncSession = Depends(get_db_session)
 ) -> PostUpdateResponse:
     response = await PostService.update_post(post_id, post, authorization, db_session)
-    return PostUpdateResponse(
-        title=response['title'],
-        new_tokens={
-            'access_token': response['access_token'],
-            'refresh_token': response['refresh_token']
-        }
-    ) if len(response) > 1 else PostUpdateResponse(
-        title=response['title']
-    )
+    return response
 
 
 @post_router.delete('/post/{post_id}', response_model=PostDeleteResponse, status_code=200)
@@ -102,12 +94,4 @@ async def delete_post(
     db_session: AsyncSession = Depends(get_db_session)
 ) -> PostDeleteResponse:
     response = await PostService.delete_post(post_id, authorization, db_session)
-    return PostDeleteResponse(
-        post_id=response['post_id'],
-        new_tokens={
-            'access_token': response['access_token'],
-            'refresh_token': response['refresh_token']
-        }
-    ) if len(response) > 1 else PostDeleteResponse(
-        post_id=response['post_id']
-    )
+    return response
