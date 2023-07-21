@@ -22,7 +22,6 @@ class UserDB(UserRegistration):
 class PostBase(BaseModel):
     title: constr(max_length=120)
     content: str
-    access_token: str
 
 
 class PostDB(BaseModel):

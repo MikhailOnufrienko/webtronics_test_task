@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import HTTPException, Header
 from fastapi.exceptions import RequestValidationError
-from jose import jwt
+from jose import ExpiredSignatureError, jwt
 from jose.exceptions import JWTError
 from redis.asyncio import client
 
@@ -119,7 +119,7 @@ class TokenService:
     ) -> None:
         current_datetime = datetime.now()
         invalid_token_key = f'invalid:{current_datetime}'
-        expires: int = settings.ACCESS_TOKEN_EXPIRES_IN # in seconds
+        expires: int = int(settings.ACCESS_TOKEN_EXPIRES_IN * 24 * 60 * 60)
         await cache.setex(invalid_token_key, expires, access_token)
 
     @staticmethod
@@ -151,8 +151,13 @@ class TokenService:
                 settings.JWT_ALGORITHM)
             if decoded_token:
                 return True
-        except JWTError:
+        except ExpiredSignatureError:
             return False
+        except JWTError:
+            raise HTTPException(
+                status_code=400,
+                detail='Невалидный access-токен. Требуется аутентификация.'
+            )
         
 
     @staticmethod

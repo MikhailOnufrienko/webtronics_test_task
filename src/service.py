@@ -3,11 +3,13 @@ import uuid
 from typing import Annotated
 
 from fastapi import HTTPException, Header, Response
+from fastapi.responses import JSONResponse
 from redis import client
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 from sqlalchemy.orm import joinedload
 from jose import jwt
+from jose.exceptions import ExpiredSignatureError, JWTError
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from src.schemas import PostUpdate, ResponseAndTokens, UserLogin, UserLogout, UserRegistration
@@ -117,10 +119,12 @@ class PostService:
 
     @staticmethod
     async def create_and_publish_post(
-        post: PostBase, db_session: AsyncSession
+        post: PostBase, authorization: Annotated[str, Header()], db_session: AsyncSession
     ) -> PostDB:
-        if await TokenService.check_access_token_not_expired(post.access_token):
-            author_id = await PostService.get_author_id(post.access_token)
+        access_token = await TokenService.get_token_authorization(authorization)
+        validation_result = await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
+        if validation_result:
+            author_id = await TokenService.get_user_id_by_token(access_token)
             new_post = Post(
                 title=post.title,
                 content=post.content,
@@ -129,25 +133,16 @@ class PostService:
             db_session.add(new_post)
             await db_session.commit()
             new_post_id_as_str = str(new_post.id)
-            return PostDB(
-                id=new_post_id_as_str,
-                title=new_post.title,
-                author_id=new_post.author_id,
-                creation_dt=new_post.creation_dt
-            )
-
-    @staticmethod
-    async def get_author_id(access_token: str) -> str:
-        try:
-            decoded_jwt: dict = jwt.decode(
-                access_token, settings.ACCESS_JWT_SECRET_KEY, settings.JWT_ALGORITHM
-            )
-            return decoded_jwt['sub']
-        except:
-            raise HTTPException(
-                status_code=400,
-                detail='Невалидный access-токен. Требуется аутентификация.'
-            )
+            creation_dt_as_string = json.dumps(new_post.creation_dt, default=str)
+            content = {'id': new_post_id_as_str,
+                'title': new_post.title,
+                'author_id': new_post.author_id,
+                'creation_dt': creation_dt_as_string}
+            headers = {
+                'X-Access-Token': validation_result[0],
+                'X-Refresh-Token': validation_result[1]
+            }
+            return JSONResponse(content=content, headers=headers)
 
     @staticmethod
     async def get_post(post_id: str, db_session: AsyncSession) -> PostSingle:

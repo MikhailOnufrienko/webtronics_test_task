@@ -68,9 +68,11 @@ async def get_post(
 
 @post_router.post('/post', response_model=PostDB, status_code=201)
 async def create_post(
-    post: PostBase, db_session: AsyncSession = Depends(get_db_session)
+    post: PostBase,
+    authorization: Annotated[str, Header()],
+    db_session: AsyncSession = Depends(get_db_session)
     ) -> PostDB:
-    response = await PostService.create_and_publish_post(post, db_session)
+    response = await PostService.create_and_publish_post(post, authorization, db_session)
     return response
 
 
