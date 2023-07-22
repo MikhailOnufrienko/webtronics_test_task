@@ -54,7 +54,9 @@ class TokenService:
         return to_encode
     
     @staticmethod
-    async def save_refresh_token_to_cache(user_id: str, token: str, cache: client.Redis) -> None:
+    async def save_refresh_token_to_cache(
+        user_id: str, token: str, cache: client.Redis
+    ) -> None:
         if await TokenService.check_refresh_token_exists_in_cache(cache, user_id):
             await TokenService.delete_refresh_token_from_cache(cache, user_id)
         expires: int = settings.REFRESH_TOKEN_EXPIRES_IN  * 24 * 60 * 60
@@ -99,7 +101,10 @@ class TokenService:
     ) -> bool:
         stored_token: bytes = await cache.get(user_id)
         if not stored_token or stored_token.decode() != old_token:
-            raise HTTPException(status_code=400, detail="Недействительный refresh-токен. Требуется пройти аутентификацию.")
+            raise HTTPException(
+                status_code=400,
+                detail='Недействительный refresh-токен. Требуется пройти аутентификацию.'
+            )
         return True
 
     @staticmethod
@@ -112,15 +117,21 @@ class TokenService:
         await cache.setex(invalid_token_key, expires, access_token)
 
     @staticmethod
-    async def check_access_token_valid_or_return_new_tokens(access_token: str) -> bool | tuple[str]:
+    async def check_access_token_valid_or_return_new_tokens(
+        access_token: str
+    ) -> bool | tuple[str]:
         cache = await client.Redis()
-        if await TokenService.check_access_token_not_used_for_logout(access_token, cache):
+        if await TokenService.check_access_token_not_used_for_logout(
+            access_token, cache
+        ):
             if await TokenService.check_access_token_signature_valid(access_token):
                 return True
             else:
                 user_id = await TokenService.get_user_id_by_token(access_token)
                 refresh_token = await TokenService.get_refresh_token_from_cache(user_id, cache)
-                new_access_token, new_refresh_token = await TokenService.refresh_tokens(user_id, access_token, refresh_token)
+                new_access_token, new_refresh_token = (
+                    await TokenService.refresh_tokens(user_id, access_token, refresh_token)
+                )
                 return new_access_token, new_refresh_token
     
     @staticmethod
@@ -154,21 +165,25 @@ class TokenService:
         return claims['sub']
     
     @staticmethod
-    async def check_access_token_not_used_for_logout(access_token: str, cache: client.Redis) -> bool:
+    async def check_access_token_not_used_for_logout(
+        access_token: str, cache: client.Redis
+    ) -> bool:
         cursor, keys = await cache.scan(b'0', match='*')
         for key in keys:
             value = await cache.get(key)
             if value == access_token.encode():
                 raise HTTPException(
                     status_code=400,
-                    detail='Недействительный access-token. Требуется пройти аутентификацию.'
+                    detail='Недействительный access-token. \
+                        Требуется пройти аутентификацию.'
                 )
         return True
     
     @staticmethod
     async def get_token_authorization(authorization: Annotated[str, Header()]) -> str:
         scheme, token = authorization.split(' ')
-        print("scheme: ", scheme)
         if scheme.lower() != 'bearer':
-            raise HTTPException(status_code=401, detail="Недействительная схема авторизации.")
+            raise HTTPException(
+                status_code=401, detail='Недействительная схема авторизации.'
+                )
         return token

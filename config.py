@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     REDIS_DB: int = 0
     ACCESS_JWT_SECRET_KEY: str
     REFRESH_JWT_SECRET_KEY: str
-    REFRESH_TOKEN_EXPIRES_IN: int
-    ACCESS_TOKEN_EXPIRES_IN: int
+    REFRESH_TOKEN_EXPIRES_IN: int  # days
+    ACCESS_TOKEN_EXPIRES_IN: int  # days
     JWT_ALGORITHM: str = 'HS256'
     
     class Config:

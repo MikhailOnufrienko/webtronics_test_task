@@ -10,12 +10,11 @@ from sqlalchemy import select, update, delete
 from sqlalchemy.orm import joinedload
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from src.schemas import Token, UserLogin, UserRegistration
-from src.models import Post
-from src.schemas import PostBase, PostSingle
-from src.models import User
-from databases import get_db_session
+from src.schemas import (PostBase, PostSingle, Token,
+                         UserLogin, UserRegistration)
+from src.models import Post, User
 from src.utils import TokenService
+from databases import get_db_session
 
 
 class UserService:
@@ -52,7 +51,9 @@ class UserService:
             return False
     
     @staticmethod
-    async def save_user_to_database(user: UserRegistration, db_session: AsyncSession) -> str:
+    async def save_user_to_database(
+        user: UserRegistration, db_session: AsyncSession
+    ) -> str:
         hashed_password = generate_password_hash(user.password)
         new_user = User(
             login=user.login,
@@ -117,7 +118,9 @@ class PostService:
         post: PostBase, authorization: Annotated[str, Header()], db_session: AsyncSession
     ) -> JSONResponse:
         access_token = await TokenService.get_token_authorization(authorization)
-        validation_result = await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
+        validation_result = (
+            await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
+        )
         if validation_result:
             author_id = await TokenService.get_user_id_by_token(access_token)
             new_post = Post(
@@ -175,14 +178,19 @@ class PostService:
         db_session: AsyncSession
     ) -> JSONResponse:
         access_token = await TokenService.get_token_authorization(authorization)
-        validation_result = await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
+        validation_result = (
+            await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
+        )
         if validation_result:
             user_id = await TokenService.get_user_id_by_token(access_token)
             query = select(Post).filter(Post.id == post_id, Post.author_id == user_id)
             result = await db_session.execute(query)
             post = result.one_or_none()
             if not post:
-                raise HTTPException(status_code=404, detail="Запись не найдена либо изменить запись может только автор.")
+                raise HTTPException(
+                    status_code=404,
+                    detail="Запись не найдена либо изменить запись может только автор."
+                )
             post_table = Post.__table__
             upd_query = (update(post_table).
                 where(post_table.c.id == uuid.UUID(post_id)).
@@ -207,14 +215,19 @@ class PostService:
         db_session: AsyncSession
     ) -> JSONResponse:
         access_token = await TokenService.get_token_authorization(authorization)
-        validation_result = await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
+        validation_result = (
+            await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
+        )
         if validation_result:
             user_id = await TokenService.get_user_id_by_token(access_token)
             query = select(Post).filter(Post.id == post_id, Post.author_id == user_id)
             result = await db_session.execute(query)
             post = result.one_or_none()
             if not post:
-                raise HTTPException(status_code=404, detail="Запись не найдена либо удалить запись может только автор.")
+                raise HTTPException(
+                    status_code=404,
+                    detail="Запись не найдена либо удалить запись может только автор."
+                )
             post_table = Post.__table__
             delete_query = (delete(post_table).
                             where(post_table.c.id == uuid.UUID(post_id)))

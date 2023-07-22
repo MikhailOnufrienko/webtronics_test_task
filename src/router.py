@@ -4,12 +4,13 @@ from fastapi import Header
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from redis import client
-from src.schemas import PostDeleteResponse, PostUpdateResponse, Token, UserRegistration, UserLogin
-from src.schemas import PostBase, PostDB, Posts, PostSingle
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from databases import get_db_session, get_redis
 from src.service import PostService, UserService
+from src.schemas import (PostDeleteResponse, PostUpdateResponse,
+                         Token, UserRegistration, UserLogin)
+from src.schemas import PostBase, PostDB, Posts, PostSingle
 from src.utils import TokenService
 
 
@@ -49,7 +50,10 @@ async def logout_user(
         response_model=Token,
         status_code=201
 )
-async def refresh_tokens(user_id: str, tokens: Token, cache: client.Redis = Depends(get_redis)) -> Token:
+async def refresh_tokens(
+    user_id: str, tokens: Token,
+    cache: client.Redis = Depends(get_redis)
+) -> Token:
     new_access_token, new_refresh_roken = await TokenService.refresh_tokens(
         user_id, tokens.access_token, tokens.refresh_token, cache
     )
@@ -94,7 +98,11 @@ async def update_post(
     return response
 
 
-@post_router.delete('/post/{post_id}', response_model=PostDeleteResponse, status_code=200)
+@post_router.delete(
+    '/post/{post_id}',
+    response_model=PostDeleteResponse,
+    status_code=200
+)
 async def delete_post(
     post_id: str,
     authorization: Annotated[str, Header()],
