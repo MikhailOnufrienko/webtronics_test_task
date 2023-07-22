@@ -10,9 +10,9 @@ from sqlalchemy import select, update, delete
 from sqlalchemy.orm import joinedload
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from src.schemas import PostUpdate, UserLogin, UserLogout, UserRegistration
+from src.schemas import Token, UserLogin, UserRegistration
 from src.models import Post
-from src.schemas import PostBase, Posts, PostSingle
+from src.schemas import PostBase, PostSingle
 from src.models import User
 from databases import get_db_session
 from src.utils import TokenService
@@ -21,11 +21,11 @@ from src.utils import TokenService
 class UserService:
 
     @staticmethod
-    async def create_user(user: UserRegistration, db_session: AsyncSession) -> JSONResponse:
+    async def create_user(user: UserRegistration, db_session: AsyncSession) -> str:
         if (not await UserService.check_login_exists(user.login)
             and not await UserService.check_email_exists(user.email)):
-            success_text = await UserService.save_user_to_database(user, db_session)
-            return JSONResponse(content=success_text, status_code=201)
+            success = await UserService.save_user_to_database(user, db_session)
+            return success
 
     @staticmethod
     async def check_login_exists(login: str) -> bool:
@@ -66,19 +66,17 @@ class UserService:
         return "Вы успешно зарегистрировались."
     
     @staticmethod
-    async def login_user(user: UserLogin) -> JSONResponse:
+    async def login_user(user: UserLogin, cache: client.Redis) -> tuple:
         if await UserService.check_credentials_correct(user.login, user.password):
             user_id = await UserService.get_user_id_by_login(user)
             access_token, refresh_token = await TokenService.generate_tokens(user_id)
-            await TokenService.save_refresh_token_to_cache(user_id, refresh_token)
-            content = json.dumps({
-                'user_id': user_id,
-                'access_token': access_token,
-                'refresh_token': refresh_token
-            })
-            response = JSONResponse(status_code=200, content=content)
-            response.headers['Content-Type'] = 'application/json'
-            return response
+            await TokenService.save_refresh_token_to_cache(user_id, refresh_token, cache)
+            success = "Вы успешно вошли в свою учётную запись."
+            headers = {
+                'X-Access-Token': access_token,
+                'X-Refresh-Token': refresh_token
+            }
+            return success, headers
     
     @staticmethod
     async def check_credentials_correct(login: str, password: str) -> bool:
@@ -105,9 +103,9 @@ class UserService:
             return str(user_id)
         
     @staticmethod
-    async def logout_user(user: UserLogout, cache: client.Redis) -> str:
-        await TokenService.add_invalid_access_token_to_cache(user.access_token, cache)
-        user_id = await TokenService.get_user_id_by_token(user.access_token)
+    async def logout_user(tokens: Token, cache: client.Redis) -> str:
+        await TokenService.add_invalid_access_token_to_cache(tokens.access_token, cache)
+        user_id = await TokenService.get_user_id_by_token(tokens.access_token)
         await TokenService.delete_refresh_token_from_cache(cache, user_id)
         return 'Вы успешно вышли из учётной записи.'
 
@@ -158,21 +156,21 @@ class PostService:
         )
 
     @staticmethod
-    async def get_posts(db_session: AsyncSession) -> Posts:
+    async def get_posts(db_session: AsyncSession) -> list[dict | None]:
         query = select(Post)
         result = await db_session.execute(query)
         posts = result.scalars().all()
-        return Posts(posts=[
-            {'id': str(post.id),
+        return [{
+            'id': str(post.id),
             'title': post.title,
             'author_id': str(post.author_id),
-            'creation_dt': post.creation_dt} for post in posts
-        ] if posts else [])
+            'creation_dt': post.creation_dt
+        } for post in posts] if posts else []
     
     @staticmethod
     async def update_post(
         post_id: str,
-        post_update: PostUpdate,
+        post_to_update: PostBase,
         authorization: Annotated[str, Header()],
         db_session: AsyncSession
     ) -> JSONResponse:
@@ -189,13 +187,13 @@ class PostService:
             upd_query = (update(post_table).
                 where(post_table.c.id == uuid.UUID(post_id)).
                 values({
-                    post_table.c.title: post_update.title,
-                    post_table.c.content: post_update.content
+                    post_table.c.title: post_to_update.title,
+                    post_table.c.content: post_to_update.content
                 })
             )
             await db_session.execute(upd_query)
             await db_session.commit()
-            content = {'title': post_update.title}
+            content = {'title': post_to_update.title}
             headers = {
                 'X-Access-Token': validation_result[0],
                 'X-Refresh-Token': validation_result[1]
@@ -222,7 +220,7 @@ class PostService:
                             where(post_table.c.id == uuid.UUID(post_id)))
             await db_session.execute(delete_query)
             await db_session.commit()
-            content = {'post_id': post_id}
+            content = {'id': post_id}
             headers = {
                 'X-Access-Token': validation_result[0],
                 'X-Refresh-Token': validation_result[1]

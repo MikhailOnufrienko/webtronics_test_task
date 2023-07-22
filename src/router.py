@@ -1,9 +1,10 @@
 from typing import Annotated
 
-from fastapi import Header, Response
+from fastapi import Header
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from redis import client
-from src.schemas import PostDeleteResponse, PostUpdate, PostUpdateResponse, Token, UserLogout, UserRegistration, UserLogin
+from src.schemas import PostDeleteResponse, PostUpdateResponse, Token, UserRegistration, UserLogin
 from src.schemas import PostBase, PostDB, Posts, PostSingle
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,31 +21,37 @@ post_router = APIRouter()
 @user_router.post('/registration', status_code=201)
 async def register_user(
     user: UserRegistration, db_session: AsyncSession = Depends(get_db_session)
-) -> Response:
-    response = await UserService.create_user(user, db_session)
-    return response
+) -> JSONResponse:
+    success = await UserService.create_user(user, db_session)
+    return JSONResponse(content=success)
 
 
 @user_router.post('/login', status_code=200)
-async def login_user(user: UserLogin) -> Response:
-    response = await UserService.login_user(user)
-    return response
+async def login_user(
+    user: UserLogin,
+    cache: client.Redis = Depends(get_redis)
+) -> JSONResponse:
+    success, headers = await UserService.login_user(user, cache)
+    return JSONResponse(content=success, headers=headers)
 
 
 @user_router.post('/logout', status_code=200)
-async def logout_user(user_logout: UserLogout, cache: client.Redis = Depends(get_redis)) -> str:
-    response = await UserService.logout_user(user_logout, cache)
-    return response
+async def logout_user(
+    tokens: Token,
+    cache: client.Redis = Depends(get_redis)
+) -> JSONResponse:
+    success = await UserService.logout_user(tokens, cache)
+    return JSONResponse(content=success)
 
 
 @user_router.post(
-        '/{user_id}/refresh-token',
+        '/{user_id}/refresh-tokens',
         response_model=Token,
         status_code=201
 )
-async def refresh_tokens(user_id: str, token_request: Token) -> Token:
+async def refresh_tokens(user_id: str, tokens: Token, cache: client.Redis = Depends(get_redis)) -> Token:
     new_access_token, new_refresh_roken = await TokenService.refresh_tokens(
-        user_id, token_request.access_token, token_request.refresh_token
+        user_id, tokens.access_token, tokens.refresh_token, cache
     )
     return Token(
         access_token=new_access_token,
@@ -53,17 +60,17 @@ async def refresh_tokens(user_id: str, token_request: Token) -> Token:
 
 
 @post_router.get('/post', response_model=Posts, status_code=200)
-async def posts(db_session: AsyncSession = Depends(get_db_session)) -> list[PostDB]:
-    response = await PostService.get_posts(db_session)
-    return response
+async def get_posts(db_session: AsyncSession = Depends(get_db_session)) -> Posts:
+    posts = await PostService.get_posts(db_session)
+    return Posts(posts=posts)
 
 
 @post_router.get('/post/{post_id}', response_model=PostSingle, status_code=200)
 async def get_post(
     post_id: str, db_session: AsyncSession = Depends(get_db_session)
 ) -> PostSingle:
-    response = await PostService.get_post(post_id, db_session)
-    return response
+    post = await PostService.get_post(post_id, db_session)
+    return post
 
 
 @post_router.post('/post', response_model=PostDB, status_code=201)
@@ -79,7 +86,7 @@ async def create_post(
 @post_router.patch('/post/{post_id}', response_model=PostUpdateResponse, status_code=200)
 async def update_post(
     post_id: str,
-    post: PostUpdate,
+    post: PostBase,
     authorization: Annotated[str, Header()],
     db_session: AsyncSession = Depends(get_db_session)
 ) -> PostUpdateResponse:

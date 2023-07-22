@@ -7,7 +7,6 @@ from jose.exceptions import JWTError
 from redis.asyncio import client
 
 from config import settings
-from databases import get_redis
 
 
 class TokenService:
@@ -55,11 +54,10 @@ class TokenService:
         return to_encode
     
     @staticmethod
-    async def save_refresh_token_to_cache(user_id: str, token: str) -> None:
-        cache: client.Redis = await get_redis()
+    async def save_refresh_token_to_cache(user_id: str, token: str, cache: client.Redis) -> None:
         if await TokenService.check_refresh_token_exists_in_cache(cache, user_id):
             await TokenService.delete_refresh_token_from_cache(cache, user_id)
-        expires: int = settings.REFRESH_TOKEN_EXPIRES_IN # in seconds
+        expires: int = settings.REFRESH_TOKEN_EXPIRES_IN  * 24 * 60 * 60
         await cache.setex(user_id, expires, token)
 
     @staticmethod
@@ -79,16 +77,15 @@ class TokenService:
 
     @staticmethod
     async def refresh_tokens(
-        user_id: str, old_access_token: str, old_refresh_token: str
+        user_id: str, old_access_token: str, old_refresh_token: str, cache: client.Redis
     ) -> tuple[str, str]:
-        cache: client.Redis = await get_redis()
         if await TokenService.check_old_token_equal_stored_token(
             user_id, old_refresh_token, cache
         ):
             new_access_token, new_refresh_token = await TokenService.generate_tokens(
                 user_id
             )
-            await TokenService.save_new_refresh_token_to_cache(
+            await TokenService.save_refresh_token_to_cache(
                 user_id, new_refresh_token, cache
             )
             await TokenService.add_invalid_access_token_to_cache(
@@ -102,15 +99,8 @@ class TokenService:
     ) -> bool:
         stored_token: bytes = await cache.get(user_id)
         if not stored_token or stored_token.decode() != old_token:
-            raise HTTPException(status_code=400, detail="Недействительный refresh-токен.")
+            raise HTTPException(status_code=400, detail="Недействительный refresh-токен. Требуется пройти аутентификацию.")
         return True
-    
-    @staticmethod
-    async def save_new_refresh_token_to_cache(
-        user_id: str, token: str, cache: client.Redis
-    ) -> None:
-        expires: int = settings.REFRESH_TOKEN_EXPIRES_IN # in seconds
-        await cache.setex(user_id, expires, token)
 
     @staticmethod
     async def add_invalid_access_token_to_cache(
@@ -118,7 +108,7 @@ class TokenService:
     ) -> None:
         current_datetime = datetime.now()
         invalid_token_key = f'invalid:{current_datetime}'
-        expires: int = int(settings.ACCESS_TOKEN_EXPIRES_IN * 24 * 60 * 60)
+        expires: int = settings.ACCESS_TOKEN_EXPIRES_IN * 24 * 60 * 60
         await cache.setex(invalid_token_key, expires, access_token)
 
     @staticmethod
@@ -131,7 +121,6 @@ class TokenService:
                 user_id = await TokenService.get_user_id_by_token(access_token)
                 refresh_token = await TokenService.get_refresh_token_from_cache(user_id, cache)
                 new_access_token, new_refresh_token = await TokenService.refresh_tokens(user_id, access_token, refresh_token)
-                await TokenService.save_new_refresh_token_to_cache(user_id, new_refresh_token, cache)
                 return new_access_token, new_refresh_token
     
     @staticmethod
@@ -155,7 +144,7 @@ class TokenService:
         except JWTError:
             raise HTTPException(
                 status_code=400,
-                detail='Невалидный access-токен. Требуется аутентификация.'
+                detail='Недействительный access-токен. Требуется пройти аутентификацию.'
             )
         
 
@@ -172,7 +161,7 @@ class TokenService:
             if value == access_token.encode():
                 raise HTTPException(
                     status_code=400,
-                    detail='Недействительный access-token. Требуется аутентификация.'
+                    detail='Недействительный access-token. Требуется пройти аутентификацию.'
                 )
         return True
     

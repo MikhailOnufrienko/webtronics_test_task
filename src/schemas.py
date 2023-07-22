@@ -15,8 +15,9 @@ class UserRegistration(UserLogin):
     email: EmailStr
 
 
-class UserDB(UserRegistration):
-    id: str
+class Token(BaseModel):
+    access_token: str
+    refresh_token: str 
 
 
 class PostBase(BaseModel):
@@ -24,32 +25,9 @@ class PostBase(BaseModel):
     content: str
 
 
-class PostDB(BaseModel):
-    id: str
-    title: str
-    author_id: str
-    creation_dt: datetime
-
-
-class Posts(BaseModel):
-    posts: list[PostDB]
-
-
-class PostSingle(BaseModel):
-    title: str
-    content: str
+class PostSingle(PostBase):
     author: str
     creation_dt: datetime
-
-
-class PostUpdate(BaseModel):
-    title: str
-    content: str
-
-
-class Token(BaseModel):
-    access_token: str
-    refresh_token: str  
 
 
 class PostUpdateResponse(BaseModel):
@@ -57,18 +35,11 @@ class PostUpdateResponse(BaseModel):
 
 
 class PostDeleteResponse(BaseModel):
-    post_id: str
+    id: str
 
 
-class UserLogout(BaseModel):
-    access_token: str
-    refresh_token: str
+class PostDB(PostSingle, PostUpdateResponse, PostDeleteResponse):
+    pass
 
-
-class ResponseAndTokens(BaseModel):
-    response: str
-    access_token: str
-    refresh_token: str
-
-class RefreshToken(BaseModel):
-    refresh_token: str
+class Posts(BaseModel):
+    posts: list[PostDB]
