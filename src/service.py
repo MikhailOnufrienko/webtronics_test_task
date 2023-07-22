@@ -239,3 +239,69 @@ class PostService:
                 'X-Refresh-Token': validation_result[1]
             } if isinstance(validation_result, tuple) else {}
             return JSONResponse(content=content, headers=headers)
+
+    @staticmethod
+    async def like_post(
+        post_id: str,
+        authorization: Annotated[str, Header()],
+        db_session: AsyncSession,
+        cache: client.Redis
+    ) -> str:
+            if PostService.check_user_allowed_like_or_dislike(post_id, authorization, db_session):
+                like_key = f'like:{post_id}'
+                like_count = await PostService.get_post_like_count(like_key, cache)
+                like_count += 1
+                await cache.set(like_key, like_count)
+                return 'Лайк добавлен.'
+            
+    @staticmethod
+    async def dislike_post(
+        post_id: str,
+        authorization: Annotated[str, Header()],
+        db_session: AsyncSession,
+        cache: client.Redis
+    ) -> str:
+            if PostService.check_user_allowed_like_or_dislike(post_id, authorization, db_session):
+                dislike_key = f'dislike:{post_id}'
+                dislike_count = await PostService.get_post_dislike_count(dislike_key, cache)
+                dislike_count += 1
+                await cache.set(dislike_key, dislike_count)
+                return 'Дизлайк добавлен.'
+        
+    @staticmethod
+    async def get_post_like_count(like_key: str, cache: client.Redis) -> int:
+        like_count: bytes = await cache.get(like_key)
+        if not like_count:
+            await cache.set(like_key, 0)
+            return 0
+        return int(like_count.decode())
+    
+    @staticmethod
+    async def get_post_dislike_count(dislike_key: str, cache: client.Redis) -> int:
+        dislike_count: bytes = await cache.get(dislike_key)
+        if not dislike_count:
+            await cache.set(dislike_key, 0)
+            return 0
+        return int(dislike_count.decode())
+    
+    @staticmethod
+    async def check_user_allowed_like_or_dislike(
+        post_id: str,
+        authorization: Annotated[str, Header()],
+        db_session: AsyncSession
+    ) -> bool:
+        access_token = await TokenService.get_token_authorization(authorization)
+        validation_result = (
+            await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
+        )
+        if validation_result:
+            user_id = await TokenService.get_user_id_by_token(access_token)
+            query = select(Post).filter(Post.id == post_id, Post.author_id == user_id)
+            result = await db_session.execute(query)
+            post = result.one_or_none()
+            if post:
+                raise HTTPException(
+                    status_code=403, detail="Действие запрещено."
+                )
+        return True
+    

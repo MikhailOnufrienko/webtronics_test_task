@@ -110,3 +110,29 @@ async def delete_post(
 ) -> PostDeleteResponse:
     response = await PostService.delete_post(post_id, authorization, db_session)
     return response
+
+
+@post_router.post('/post/{post_id}/like', status_code=200)
+async def like_post(
+    post_id: str,
+    authorization: Annotated[str, Header()],
+    db_session: AsyncSession = Depends(get_db_session),
+    cache: client.Redis = Depends(get_redis)
+) -> str:
+    success = await PostService.like_post(
+        post_id, authorization, db_session, cache
+    )
+    return success
+
+
+@post_router.post('/post/{post_id}/dislike', status_code=200)
+async def dislike_post(
+    post_id: str,
+    authorization: Annotated[str, Header()],
+    db_session: AsyncSession = Depends(get_db_session),
+    cache: client.Redis = Depends(get_redis)
+) -> str:
+    success = await PostService.dislike_post(
+        post_id, authorization, db_session, cache
+    )
+    return success
