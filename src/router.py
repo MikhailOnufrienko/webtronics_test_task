@@ -7,11 +7,12 @@ from redis import client
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from databases import get_db_session, get_redis
-from src.service import PostService, UserService
+from src.services.post_service import PostService
+from src.services.user_service import UserService
 from src.schemas import (PostDeleteResponse, PostUpdateResponse,
                          Token, UserRegistration, UserLogin)
 from src.schemas import PostBase, PostDB, Posts, PostSingle
-from src.utils import TokenService
+from src.services.token_service import TokenService
 
 
 user_router = APIRouter()
@@ -30,9 +31,10 @@ async def register_user(
 @user_router.post('/login', status_code=200)
 async def login_user(
     user: UserLogin,
+    db_session: AsyncSession = Depends(get_db_session),
     cache: client.Redis = Depends(get_redis)
 ) -> JSONResponse:
-    success, headers = await UserService.login_user(user, cache)
+    success, headers = await UserService.login_user(user, db_session, cache)
     return JSONResponse(content=success, headers=headers)
 
 
