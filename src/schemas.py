@@ -25,7 +25,12 @@ class PostBase(BaseModel):
     content: str
 
 
-class PostSingle(PostBase):
+class PostLikeDislikeMixin(BaseModel):
+    like_count: int
+    dislike_count: int
+
+
+class PostSingle(PostBase, PostLikeDislikeMixin):
     author: str
     creation_dt: datetime
 
@@ -38,8 +43,16 @@ class PostDeleteResponse(BaseModel):
     id: str
 
 
-class PostDB(PostSingle, PostUpdateResponse, PostDeleteResponse):
+class PostDB(BaseModel):
+    id: str
+    title: str
+    author_id: str
+    creation_dt: datetime
+
+
+class PostDBLikeDislike(PostDB, PostLikeDislikeMixin):
     pass
+    
 
 class Posts(BaseModel):
-    posts: list[PostDB]
+    posts: list[PostDBLikeDislike]

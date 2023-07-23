@@ -57,19 +57,8 @@ class TokenService:
     async def save_refresh_token_to_cache(
         user_id: str, token: str, cache: client.Redis
     ) -> None:
-        if await TokenService.check_refresh_token_exists_in_cache(cache, user_id):
-            await TokenService.delete_refresh_token_from_cache(cache, user_id)
         expires: int = settings.REFRESH_TOKEN_EXPIRES_IN  * 24 * 60 * 60
         await cache.setex(user_id, expires, token)
-
-    @staticmethod
-    async def check_refresh_token_exists_in_cache(
-        cache: client.Redis, user_id: str
-    ) -> bool:
-        old_token = await cache.get(user_id)
-        if old_token:
-            return True
-        return False
 
     @staticmethod
     async def delete_refresh_token_from_cache(
@@ -168,7 +157,7 @@ class TokenService:
     async def check_access_token_not_used_for_logout(
         access_token: str, cache: client.Redis
     ) -> bool:
-        cursor, keys = await cache.scan(b'0', match='*')
+        cursor, keys = await cache.scan(b'0', match='invalid*')
         for key in keys:
             value = await cache.get(key)
             if value == access_token.encode():

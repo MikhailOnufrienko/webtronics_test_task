@@ -64,16 +64,21 @@ async def refresh_tokens(
 
 
 @post_router.get('/post', response_model=Posts, status_code=200)
-async def get_posts(db_session: AsyncSession = Depends(get_db_session)) -> Posts:
-    posts = await PostService.get_posts(db_session)
+async def get_posts(
+    db_session: AsyncSession = Depends(get_db_session),
+    cache: client.Redis = Depends(get_redis)
+) -> Posts:
+    posts = await PostService.get_posts(db_session, cache)
     return Posts(posts=posts)
 
 
 @post_router.get('/post/{post_id}', response_model=PostSingle, status_code=200)
 async def get_post(
-    post_id: str, db_session: AsyncSession = Depends(get_db_session)
+    post_id: str,
+    db_session: AsyncSession = Depends(get_db_session),
+    cache: client.Redis = Depends(get_redis)
 ) -> PostSingle:
-    post = await PostService.get_post(post_id, db_session)
+    post = await PostService.get_post(post_id, db_session, cache)
     return post
 
 

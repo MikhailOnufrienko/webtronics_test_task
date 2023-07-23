@@ -143,7 +143,7 @@ class PostService:
             return JSONResponse(content=content, headers=headers)
 
     @staticmethod
-    async def get_post(post_id: str, db_session: AsyncSession) -> PostSingle:
+    async def get_post(post_id: str, db_session: AsyncSession, cache: client.Redis) -> PostSingle:
         query = select(Post).filter(Post.id == post_id)
         query = query.options(joinedload(Post.author))
         result = await db_session.execute(query)
@@ -151,15 +151,21 @@ class PostService:
         if not post:
             raise HTTPException(status_code=404, detail='Запись не найдена.')
         author_name = post.author.login
+        like_count = await PostService.get_post_like_count(post_id, cache)
+        dislike_count = await PostService.get_post_dislike_count(post_id, cache)
         return PostSingle(
             title=post.title,
             content=post.content,
             author=author_name,
-            creation_dt=post.creation_dt
+            creation_dt=post.creation_dt,
+            like_count=like_count,
+            dislike_count=dislike_count
         )
 
     @staticmethod
-    async def get_posts(db_session: AsyncSession) -> list[dict | None]:
+    async def get_posts(
+        db_session: AsyncSession, cache: client.Redis
+    ) -> list[dict | None]:
         query = select(Post)
         result = await db_session.execute(query)
         posts = result.scalars().all()
@@ -167,7 +173,9 @@ class PostService:
             'id': str(post.id),
             'title': post.title,
             'author_id': str(post.author_id),
-            'creation_dt': post.creation_dt
+            'creation_dt': post.creation_dt,
+            'like_count': await PostService.get_post_like_count(str(post.id), cache),
+            'dislike_count': await PostService.get_post_dislike_count(str(post.id), cache)
         } for post in posts] if posts else []
     
     @staticmethod
@@ -247,11 +255,14 @@ class PostService:
         db_session: AsyncSession,
         cache: client.Redis
     ) -> str:
-            if PostService.check_user_allowed_like_or_dislike(post_id, authorization, db_session):
-                like_key = f'like:{post_id}'
-                like_count = await PostService.get_post_like_count(like_key, cache)
+        user_id = await PostService.check_user_allowed_like_or_dislike(post_id, authorization, db_session)
+        if user_id:
+            if await PostService.check_user_likes_or_dislikes_first_time(user_id, post_id, cache, 'like'):
+                like_count = await PostService.get_post_like_count(post_id, cache)
                 like_count += 1
-                await cache.set(like_key, like_count)
+                await cache.set(f'like:{post_id}', like_count)
+                await cache.rpush(f'like:{user_id}', post_id)
+                await cache.lrem(f'dislike:{user_id}', 0, post_id)
                 return 'Лайк добавлен.'
             
     @staticmethod
@@ -261,15 +272,19 @@ class PostService:
         db_session: AsyncSession,
         cache: client.Redis
     ) -> str:
-            if PostService.check_user_allowed_like_or_dislike(post_id, authorization, db_session):
-                dislike_key = f'dislike:{post_id}'
-                dislike_count = await PostService.get_post_dislike_count(dislike_key, cache)
+        user_id = await PostService.check_user_allowed_like_or_dislike(post_id, authorization, db_session)
+        if user_id:
+            if await PostService.check_user_likes_or_dislikes_first_time(user_id, post_id, cache, 'dislike'):
+                dislike_count = await PostService.get_post_dislike_count(post_id, cache)
                 dislike_count += 1
-                await cache.set(dislike_key, dislike_count)
+                await cache.set(f'dislike:{post_id}', dislike_count)
+                await cache.rpush(f'dislike:{user_id}', post_id)
+                await cache.lrem(f'like:{user_id}', 0, post_id)
                 return 'Дизлайк добавлен.'
         
     @staticmethod
-    async def get_post_like_count(like_key: str, cache: client.Redis) -> int:
+    async def get_post_like_count(post_id: str, cache: client.Redis) -> int:
+        like_key = f'like:{post_id}'
         like_count: bytes = await cache.get(like_key)
         if not like_count:
             await cache.set(like_key, 0)
@@ -277,7 +292,8 @@ class PostService:
         return int(like_count.decode())
     
     @staticmethod
-    async def get_post_dislike_count(dislike_key: str, cache: client.Redis) -> int:
+    async def get_post_dislike_count(post_id: str, cache: client.Redis) -> int:
+        dislike_key = f'dislike:{post_id}'
         dislike_count: bytes = await cache.get(dislike_key)
         if not dislike_count:
             await cache.set(dislike_key, 0)
@@ -289,7 +305,7 @@ class PostService:
         post_id: str,
         authorization: Annotated[str, Header()],
         db_session: AsyncSession
-    ) -> bool:
+    ) -> str:
         access_token = await TokenService.get_token_authorization(authorization)
         validation_result = (
             await TokenService.check_access_token_valid_or_return_new_tokens(access_token)
@@ -303,5 +319,27 @@ class PostService:
                 raise HTTPException(
                     status_code=403, detail="Действие запрещено."
                 )
-        return True
+            return user_id
     
+    @staticmethod
+    async def check_user_likes_or_dislikes_first_time(
+        user_id: str, post_id: str, cache: client.Redis, flag: str
+    ) -> bool:
+        if flag == 'like':
+            if not await cache.exists(f'like:{user_id}'):
+                return True
+            posts_user_liked = await cache.lrange(f'like:{user_id}', 0, -1)
+            if post_id.encode() in posts_user_liked:
+                raise HTTPException(
+                    status_code=403, detail="Действие запрещено."
+                )
+            return True
+        else:
+            if not await cache.exists(f'dislike:{user_id}'):
+                return True
+            posts_user_disliked = await cache.lrange(f'dislike:{user_id}', 0, -1)
+            if post_id.encode() in posts_user_disliked:
+                raise HTTPException(
+                    status_code=403, detail="Действие запрещено."
+                )
+            return True
