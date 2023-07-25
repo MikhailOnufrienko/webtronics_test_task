@@ -2,12 +2,12 @@ from pydantic import BaseSettings
 
 
 class Settings(BaseSettings):
-    SERVICE_NAME: str = 'webtronics_test'
+    SERVICE_NAME: str = 'webtronics'
     DB_HOST: str = '127.0.0.1'
     DB_PORT: int = 5432
     DB_USER: str
     DB_PASSWORD: str
-    DB_NAME: str = 'webtronics_test'
+    DB_NAME: str = 'webtronics'
     REDIS_HOST: str = '127.0.0.1'
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
